@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <title>RAG • Connexion</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    :root{
+      --bg:#0b1220;--card:#0f172a;--panel:#111827;--text:#e5e7eb;--muted:#9ca3af;
+      --brand:#22c55e;--input:#0b1326;--border:#1f2937;--danger:#ef4444;
+      --ring: 0 0 0 3px rgba(34,197,94,.25);
+    }
+    .light:root{
+      --bg:#f6f7fb;--card:#ffffff;--panel:#ffffff;--text:#0f172a;--muted:#475569;
+      --brand:#16a34a;--input:#f1f5f9;--border:#e5e7eb;--danger:#dc2626;
+      --ring: 0 0 0 3px rgba(34,197,94,.2);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;background:radial-gradient(1200px 800px at 20% -20%,rgba(34,197,94,.08),transparent),
+                 radial-gradient(1000px 600px at 120% 120%,rgba(59,130,246,.08),transparent),
+                 var(--bg);
+      color:var(--text);font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;
+      display:grid;place-items:center;padding:24px;transition:background .2s,color .2s;
+    }
+    .card{
+      width:100%;max-width:980px;display:grid;grid-template-columns:1.2fr 1fr;gap:0;
+      background:linear-gradient(180deg,rgba(255,255,255,.04),transparent) , var(--card);
+      border:1px solid var(--border); border-radius:18px; overflow:hidden;
+      box-shadow: 0 10px 40px rgba(0,0,0,.25);
+    }
+    @media (max-width: 920px){ .card{grid-template-columns:1fr} .hero{display:none} }
+    .hero{
+      padding:36px;background:
+        radial-gradient(800px 500px at -20% 0%, rgba(34,197,94,.12), transparent),
+        radial-gradient(800px 500px at 120% 120%, rgba(59,130,246,.12), transparent),
+        linear-gradient(140deg, #0b1326 0%, #0f172a 100%);
+      display:flex;flex-direction:column;justify-content:center;align-items:center;
+    }
+    /* ✅ Logo centré et agrandi */
+    .hero .brand{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:12px;
+      margin-bottom:24px;
+    }
+    .hero img{
+      height:140px; /* taille du logo */
+      width:auto;
+    }
+    .hero .brand strong{
+      font-size:28px;
+      font-weight:800;
+      color:var(--text);
+      text-align:center;
+    }
+    .hero h1{margin:24px 0 10px;font-size:28px;text-align:center}
+    .hero p{margin:0;color:var(--muted);max-width:40ch;line-height:1.6;text-align:center}
+
+    .form{
+      padding:36px;background:var(--panel);display:flex;flex-direction:column;gap:18px;
+    }
+    .tabs{display:flex;gap:10px;margin-bottom:6px}
+    .tab{
+      flex:1;background:#065f46;border:1px solid #065f46;color:white;
+      padding:10px 14px;border-radius:12px;cursor:pointer;text-align:center;font-weight:600;
+      opacity:.85;transition:.2s;
+    }
+    .tab.secondary{background:transparent;color:var(--text);border:1px solid var(--border)}
+    .tab:hover{opacity:1}
+    .field{display:flex;flex-direction:column;gap:8px}
+    .label{font-weight:600}
+    .input{
+      display:flex;align-items:center;gap:8px;background:var(--input);border:1px solid var(--border);
+      border-radius:12px;padding:12px 14px;color:var(--text)
+    }
+    .input input{
+      flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:15px
+    }
+    .input:focus-within{box-shadow:var(--ring);border-color:rgba(34,197,94,.45)}
+    .hint{font-size:12px;color:var(--muted)}
+    .danger{color:var(--danger);font-size:13px}
+    .btn{
+      background:#065f46;border:1px solid #065f46;color:#fff;border-radius:12px;padding:12px 16px;
+      font-weight:700;cursor:pointer
+    }
+    .btn.secondary{background:transparent;color:var(--text);border-color:var(--border)}
+    .row{display:flex;gap:10px}
+    .row > *{flex:1}
+    .footer{
+      margin-top:4px;padding-top:12px;border-top:1px dashed var(--border);display:flex;gap:10px;align-items:center
+    }
+    .footer input{width:100%;background:var(--input);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text)}
+    .theme{position:fixed;right:12px;bottom:12px}
+    .theme button{border:1px solid var(--border);background:var(--panel);color:var(--text);padding:10px 12px;border-radius:10px;cursor:pointer}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="hero">
+      <div class="brand">
+        <img id="brandLogo" alt="logo"/>
+        <strong>RAG Agent</strong>
+      </div>
+      <div>
+        <h1>Connecte-toi et commence à poser des questions</h1>
+        <p>L’agent va chercher uniquement dans tes documents ingérés (Pinecone) et évite les hallucinations via un filtrage de similarité.</p>
+      </div>
+    </div>
+
+    <div class="form">
+      <div class="tabs">
+        <button id="btnSignIn"  class="tab">Se connecter</button>
+        <button id="btnSignUp"  class="tab secondary">Créer un compte</button>
+      </div>
+
+      <div id="nameRow" class="field" style="display:none">
+        <label class="label">Nom</label>
+        <div class="input"><i data-lucide="user"></i><input id="name" placeholder="John Doe"/></div>
+      </div>
+
+      <div class="field">
+        <label class="label">Email</label>
+        <div class="input"><i data-lucide="mail"></i><input id="email" placeholder="you@email.com" type="email"/></div>
+      </div>
+
+      <div class="field">
+        <label class="label">Mot de passe</label>
+        <div class="input">
+          <i data-lucide="lock"></i>
+          <input id="password" placeholder="********" type="password" />
+          <button id="togglePwd" title="Afficher" style="background:transparent;border:none;color:var(--muted);cursor:pointer"><i data-lucide="eye"></i></button>
+        </div>
+      </div>
+
+      <div id="error" class="danger" style="display:none"></div>
+
+      <div class="row">
+        <button id="submit" class="btn">Se connecter</button>
+        <button id="toChat" class="btn secondary" title="Aller au chat si déjà connecté">Aller au chat</button>
+      </div>
+
+      <div class="footer">
+        <span class="hint">Backend URL</span>
+        <input id="backend" placeholder="http://127.0.0.1:8000"/>
+        <button id="saveBackend" class="btn secondary" style="flex:0 0 auto">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="theme">
+    <button id="toggleTheme"><i data-lucide="moon"></i></button>
+  </div>
+
+<script>
+  // --- CONFIG ---
+  const LOGO_PATH = "./assets/logo.png";
+
+  // Icons
+  lucide.createIcons();
+
+  // Theme
+  const savedTheme = localStorage.getItem("theme") || "dark";
+  if(savedTheme==="light") document.documentElement.classList.add("light");
+  document.getElementById("toggleTheme").onclick = ()=>{
+    document.documentElement.classList.toggle("light");
+    localStorage.setItem("theme", document.documentElement.classList.contains("light")?"light":"dark");
+  };
+
+  // Logo (avec fallback discret si le chemin n’est pas bon)
+  const logoEl = document.getElementById("brandLogo");
+  logoEl.src = LOGO_PATH;
+  logoEl.onerror = ()=>{ logoEl.remove(); };
+
+  // Backend URL
+  const backendInput = document.getElementById("backend");
+  backendInput.value = localStorage.getItem("backend_url") || "http://127.0.0.1:8000";
+  document.getElementById("saveBackend").onclick = ()=>{
+    localStorage.setItem("backend_url", backendInput.value.trim());
+    alert("Backend enregistré ✅");
+  };
+
+  // Tabs
+  const btnSignIn = document.getElementById("btnSignIn");
+  const btnSignUp = document.getElementById("btnSignUp");
+  const nameRow   = document.getElementById("nameRow");
+  let mode = "signin";
+  function setMode(m){
+    mode = m;
+    const a = m==="signin";
+    btnSignIn.classList.toggle("secondary", !a);
+    btnSignUp.classList.toggle("secondary", a);
+    document.getElementById("submit").textContent = a ? "Se connecter" : "Créer un compte";
+    nameRow.style.display = a ? "none" : "flex";
+  }
+  btnSignIn.onclick=()=>setMode("signin");
+  btnSignUp.onclick=()=>setMode("signup");
+
+  // Password toggle
+  document.getElementById("togglePwd").onclick = (e)=>{
+    e.preventDefault();
+    const i = document.getElementById("password");
+    i.type = i.type==="password" ? "text" : "password";
+  };
+
+  // If already logged → go
+  document.getElementById("toChat").onclick = ()=>{
+    if(localStorage.getItem("token")) location.href="chat.html";
+    else alert("Pas encore connecté.");
+  };
+
+  // Submit
+  document.getElementById("submit").onclick = async ()=>{
+    const backend = (localStorage.getItem("backend_url")||backendInput.value||"").trim();
+    const email   = document.getElementById("email").value.trim();
+    const password= document.getElementById("password").value;
+    const name    = document.getElementById("name").value.trim();
+    const err     = document.getElementById("error");
+    err.style.display="none"; err.textContent="";
+
+    if(!backend){ err.textContent="Backend manquant."; err.style.display="block"; return;}
+    if(!email || !password){ err.textContent="Email et mot de passe requis."; err.style.display="block"; return;}
+
+    try{
+      const path = mode==="signin" ? "/auth/login" : "/auth/signup";
+      const body = mode==="signin" ? {email,password} : {email,password,name: name||email.split("@")[0]};
+      const res = await fetch(backend+path,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(body)
+      });
+      const data = await res.json();
+      if(!res.ok) throw new Error(data?.detail || data?.error || res.statusText);
+
+      localStorage.setItem("backend_url", backend);
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user||{}));
+      location.href="chat.html";
+    }catch(e){
+      err.textContent = e.message || "Échec de la requête.";
+      err.style.display="block";
+    }
+  };
+
+  // Default to signin
+  setMode("signin");
+</script>
+</body>
+</html>

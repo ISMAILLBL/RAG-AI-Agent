@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <title>RAG Agent • Documentation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    :root{
+      --bg:#0b1220; --panel:#0f172a; --card:#0d1426; --muted:#93a0b8; --text:#e6e9f2;
+      --border:#1e2a40; --brand:#22c55e; --brand-2:#16a34a; --danger:#ef4444;
+      --input:#0b1326; --ring:0 0 0 3px rgba(34,197,94,.25); --shadow:0 10px 30px rgba(0,0,0,.25);
+      --grad1: radial-gradient(1200px 800px at 120% -20%, rgba(59,130,246,.10), transparent);
+      --grad2: radial-gradient(900px 600px at -10% 120%, rgba(34,197,94,.10), transparent);
+      --tocw: 280px;
+    }
+    .light:root{
+      --bg:#f5f7fb; --panel:#ffffff; --card:#ffffff; --muted:#566079; --text:#101524;
+      --border:#e7ebf2; --brand:#16a34a; --brand-2:#15803d; --danger:#dc2626;
+      --input:#f1f5f9; --ring:0 0 0 3px rgba(34,197,94,.20); --shadow:0 8px 24px rgba(15,23,42,.08);
+      --grad1: radial-gradient(1200px 800px at 120% -20%, rgba(59,130,246,.10), transparent);
+      --grad2: radial-gradient(900px 600px at -10% 120%, rgba(34,197,94,.10), transparent);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;
+      color:var(--text); background: var(--grad1), var(--grad2), var(--bg);
+    }
+
+    /* Header */
+    .header{
+      position:sticky; top:0; z-index:50;
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding:14px 18px; background:linear-gradient(180deg, rgba(0,0,0,.18), transparent);
+      border-bottom:1px solid rgba(255,255,255,.05);
+      backdrop-filter: blur(6px);
+    }
+    .brand{ display:flex; align-items:center; gap:10px; font-weight:800; font-size:18px }
+    .brand img{ height:34px; width:auto; display:block }
+    .nav{ display:flex; align-items:center; gap:8px; flex-wrap:wrap }
+    .link{
+      border:1px solid var(--border); background:var(--panel); color:var(--text);
+      padding:8px 12px; border-radius:10px; text-decoration:none; display:flex; gap:8px; align-items:center;
+    }
+    .link.primary{ background:var(--brand); color:#fff; border-color:var(--brand-2); font-weight:700 }
+    .icon-btn{ border:1px solid var(--border); background:var(--panel); color:var(--text); padding:10px 12px; border-radius:10px; cursor:pointer }
+
+    /* Layout */
+    .wrap{
+      display:grid; grid-template-columns: var(--tocw) 1fr; gap:18px;
+      max-width:1200px; margin: 18px auto; padding: 0 18px 32px;
+    }
+    @media (max-width: 980px){
+      .wrap{ grid-template-columns: 1fr }
+      .toc{ position:relative; top:0 }
+    }
+
+    /* TOC */
+    .toc{
+      position:sticky; top:84px;
+      border:1px solid var(--border); background:var(--panel); border-radius:16px; padding:14px;
+      box-shadow:var(--shadow); height:max-content;
+    }
+    .toc h3{ margin:0 0 8px; font-size:16px }
+    .toc a{
+      display:flex; gap:8px; align-items:center; padding:8px 8px; border-radius:10px;
+      color:var(--text); text-decoration:none; border:1px solid transparent;
+    }
+    .toc a:hover{ background:var(--card); border-color:var(--border) }
+    .toc .muted{ color:var(--muted); font-size:13px }
+
+    /* Content */
+    .content{
+      display:flex; flex-direction:column; gap:18px;
+    }
+    .panel{
+      border:1px solid var(--border); background:var(--panel); border-radius:16px; padding:16px;
+      box-shadow:var(--shadow);
+    }
+    .panel h2{ margin:0 0 10px; font-size:22px }
+    .panel h3{ margin:12px 0 8px; font-size:18px }
+    .muted{ color:var(--muted) }
+    .kbd{
+      display:inline-block; border:1px solid var(--border); background:var(--card); border-radius:6px;
+      padding:2px 6px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px;
+    }
+
+    /* Tooltip stylé */
+    .tt{ position:relative }
+    .tt[data-tt]:hover:after, .tt[data-tt]:hover:before{ opacity:1; transform:translate(-50%,0) }
+    .tt[data-tt]:after{
+      content: attr(data-tt);
+      position:absolute; left:50%; bottom: calc(100% + 8px);
+      transform: translate(-50%, 6px);
+      background: var(--panel); color: var(--text);
+      border:1px solid var(--border); border-radius:10px; padding:8px 10px;
+      font-size:12px; white-space:nowrap; box-shadow: var(--shadow);
+      opacity:0; transition: .15s ease; z-index:60;
+    }
+    .tt[data-tt]:before{
+      content:""; position:absolute; left:50%; bottom: 100%;
+      transform: translate(-50%, 6px);
+      border:6px solid transparent; border-top-color: var(--border);
+      opacity:0; transition:.15s ease;
+    }
+
+    /* Lists & code blocks */
+    ul{ margin:8px 0 0 18px; }
+    li{ margin: 6px 0 }
+    code{
+      background:var(--card); border:1px solid var(--border);
+      padding:2px 6px; border-radius:6px;
+    }
+
+    /* Callouts */
+    .callout{
+      border:1px dashed var(--border); background:var(--card); border-radius:12px; padding:12px;
+    }
+
+    .footer{
+      margin: 24px auto 32px; text-align:center; color:var(--muted); font-size:14px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="header" aria-label="Barre supérieure">
+    <div class="brand">
+      <img id="logo" alt="Logo IDEO Factory"/>
+      <span>RAG Agent</span>
+    </div>
+    <nav class="nav" aria-label="Navigation principale">
+      <a class="link" href="accueil.html"><i data-lucide="home"></i> Accueil</a>
+      <a class="link" href="login.html"><i data-lucide="log-in"></i> Se connecter</a>
+      <button id="toggleTheme" class="icon-btn tt" data-tt="Mode clair/sombre" aria-label="Changer de thème">
+        <i data-lucide="sun-moon"></i>
+      </button>
+    </nav>
+  </header>
+
+  <div class="wrap">
+    <!-- TOC -->
+    <aside class="toc" aria-label="Sommaire">
+      <h3><i data-lucide="book-open"></i> Sommaire</h3>
+      <a href="#about"><i data-lucide="info"></i> À propos</a>
+      <a href="#overview"><i data-lucide="sparkles"></i> Aperçu du projet</a>
+      <a href="#getting-started"><i data-lucide="rocket"></i> Prise en main</a>
+      <a href="#faq"><i data-lucide="message-circle"></i> FAQ & Small-talk</a>
+      <a href="#security"><i data-lucide="shield"></i> Sécurité & Confidentialité</a>
+      <a href="#troubleshoot"><i data-lucide="bug"></i> Dépannage</a>
+      <a href="#shortcuts"><i data-lucide="keyboard"></i> Raccourcis</a>
+      <a href="#release"><i data-lucide="files"></i> Release notes</a>
+      <a href="#contact"><i data-lucide="mail"></i> Contact</a>
+      <div class="muted" style="margin-top:8px">Doc interne — prototype</div>
+    </aside>
+
+    <!-- Content -->
+    <main class="content">
+      <!-- ABOUT -->
+      <section id="about" class="panel" aria-label="À propos">
+        <h2>À propos d’IDEO Factory & de l’agent RAG</h2>
+        <p>
+          IDEO Factory (Casablanca, Maroc) accompagne entreprises et administrations dans la
+          digitalisation de la formation depuis 2006. Dans ce prototype, nous présentons un
+          <strong>agent RAG (Retrieval-Augmented Generation)</strong> capable de répondre à des questions
+          en s’appuyant exclusivement sur des documents PDF ingérés et indexés dans une
+          <em>base vectorielle</em> (Pinecone).
+        </p>
+        <div class="callout">
+          <strong>Objectif :</strong> offrir un assistant de recherche documentaire fiable, traçable (sources
+          visibles) et sécurisé (authentification, rôles), avec une interface moderne et agréable.
+        </div>
+      </section>
+
+      <!-- OVERVIEW -->
+      <section id="overview" class="panel" aria-label="Aperçu du projet">
+        <h2>Architecture & grandes fonctionnalités</h2>
+        <h3>Architecture 3-tiers</h3>
+        <ul>
+          <li><strong>Front</strong> (HTML/CSS/JS) : écrans Accueil, Login, Chat, Upload PDF, historique.</li>
+          <li><strong>Back</strong> (FastAPI) : endpoints <code>/auth</code>, <code>/chat</code>, <code>/conversations</code>, <code>/ingest</code>, chitchat.</li>
+          <li><strong>Données</strong> : SQLite (users, conversations, messages), Pinecone (vecteurs), stockage fichiers.</li>
+        </ul>
+        <h3>Points forts</h3>
+        <ul>
+          <li><strong>RAG</strong> : réponses basées <em>uniquement</em> sur les passages les plus proches, avec sources.</li>
+          <li><strong>Ingestion PDF</strong> : mono/multi-upload, chunking, embeddings, indexation Pinecone.</li>
+          <li><strong>Gestion des conversations</strong> : création auto, titres générés, renommage/suppression.</li>
+          <li><strong>Small-talk</strong> : activables via <code>ENABLE_CHITCHAT=true</code> (ex. « cv » = « ça va »).</li>
+          <li><strong>UI soignée</strong> : dark/light, tooltips stylisés, gestion titres longs, sidebar responsive.</li>
+        </ul>
+      </section>
+
+      <!-- GETTING STARTED -->
+      <section id="getting-started" class="panel" aria-label="Prise en main">
+        <h2>Prise en main</h2>
+        <h3>1) Créer un compte</h3>
+        <ul>
+          <li>Depuis <a class="link" href="accueil.html"><i data-lucide="home"></i> Accueil</a> ou <a class="link" href="login.html"><i data-lucide="log-in"></i> Login</a>, cliquez sur <strong>Créer un compte</strong>.</li>
+          <li>Renseignez email + mot de passe (nom optionnel à l’inscription).</li>
+        </ul>
+        <h3>2) Vérifier l’API</h3>
+        <ul>
+          <li>Le point <code>/health</code> doit répondre <em>OK</em>. Le badge « API OK » s’affiche dans l’UI.</li>
+          <li>Configurez l’URL backend dans <span class="kbd">login</span> si besoin (ex. <code>http://127.0.0.1:8000</code>).</li>
+        </ul>
+        <h3>3) Ingester des PDF</h3>
+        <ul>
+          <li>Dans le chat, bouton <strong>Ajouter PDF</strong> → sélectionnez un ou plusieurs PDF.</li>
+          <li>Suivez le toast de confirmation : ingestion ok/erreurs.</li>
+        </ul>
+        <h3>4) Poser vos questions</h3>
+        <ul>
+          <li>Saisissez une question : l’agent va récupérer les passages pertinents et répondre.</li>
+          <li>Les <strong>sources</strong> (titres, score, chunk) apparaissent sous les réponses.</li>
+        </ul>
+      </section>
+
+      <!-- FAQ -->
+      <section id="faq" class="panel" aria-label="FAQ & Small-talk">
+        <h2>FAQ & Small-talk</h2>
+        <h3>Questions fréquentes</h3>
+        <ul>
+          <li><strong>« cv » / « ça va ? »</strong> → interprété comme un salut amical (si chitchat activé).</li>
+          <li><strong>« Comment ça marche ? »</strong> → l’agent décrit le pipeline RAG (ingestion → recherche → génération).</li>
+          <li><strong>« Qui es-tu ? »</strong> → présentation de l’agent et de son périmètre (réponses basées documents).</li>
+          <li><strong>« Quelles sources ? »</strong> → l’agent liste les extraits utilisés pour répondre.</li>
+        </ul>
+        <div class="callout">
+          <strong>Astuce :</strong> si aucune source pertinente n’est trouvée, l’agent l’indique clairement (pas d’hallucinations).
+        </div>
+      </section>
+
+      <!-- SECURITY -->
+      <section id="security" class="panel" aria-label="Sécurité & Confidentialité">
+        <h2>Sécurité & Confidentialité</h2>
+        <ul>
+          <li><strong>JWT</strong> : endpoints protégés, token stocké côté front (session locale).</li>
+          <li><strong>Données</strong> : PDF et embeddings restent dans l’environnement de l’entreprise.</li>
+          <li><strong>OpenAI API</strong> : clé privée côté serveur uniquement ; coûts variables (suivre la consommation).</li>
+          <li><strong>Logs</strong> : mode debug désactivable en prod ; limiter les données sensibles dans les traces.</li>
+        </ul>
+      </section>
+
+      <!-- TROUBLESHOOT -->
+      <section id="troubleshoot" class="panel" aria-label="Dépannage">
+        <h2>Dépannage</h2>
+        <h3>API 404 / 422</h3>
+        <ul>
+          <li>Vérifier la bonne route : <code>/conversations</code> vs <code>/conversation</code> (fallback géré côté front).</li>
+          <li>Contrôler les encodages d’ID dans l’URL (<code>encodeURIComponent</code>).</li>
+        </ul>
+        <h3>Ingestion PDF</h3>
+        <ul>
+          <li>Utiliser les bons endpoints : <code>/ingest/upload</code> (mono) ou <code>/ingest/upload-multi</code> (multi).</li>
+          <li>Vérifier la taille/qualité des PDF ; réessayer si timeouts réseau.</li>
+        </ul>
+        <h3>UI</h3>
+        <ul>
+          <li>Titres trop longs : ellipses + tooltip intégrés.</li>
+          <li>Boutons renommer/supprimer : vérifier l’API UP/DELETE côté backend.</li>
+        </ul>
+      </section>
+
+      <!-- SHORTCUTS -->
+      <section id="shortcuts" class="panel" aria-label="Raccourcis clavier">
+        <h2>Raccourcis clavier</h2>
+        <ul>
+          <li><span class="kbd">Entrée</span> : envoyer un message</li>
+          <li><span class="kbd">Shift</span> + <span class="kbd">Entrée</span> : retour à la ligne</li>
+          <li><span class="kbd">/</span> : focus barre de recherche des conversations</li>
+        </ul>
+      </section>
+
+      <!-- RELEASE -->
+      <section id="release" class="panel" aria-label="Release notes">
+        <h2>Release notes</h2>
+        <ul>
+          <li><strong>v0.1.0</strong> — Première version interne (auth, ingestion, chat RAG, UI moderne, tooltips, dark/light).</li>
+        </ul>
+      </section>
+
+      <!-- CONTACT -->
+      <section id="contact" class="panel" aria-label="Contact">
+        <h2>Contact</h2>
+        <p class="muted">
+          Équipe IDEO Factory — Casablanca, Maroc. Accès : <a class="link" href="accueil.html"><i data-lucide="home"></i> Accueil</a> •
+          <a class="link" href="login.html"><i data-lucide="log-in"></i> Login</a> •
+          <a class="link primary" href="chat.html"><i data-lucide="message-square"></i> Chat</a>
+        </p>
+      </section>
+    </main>
+  </div>
+
+  <div class="footer">© <span id="year"></span> IDEO Factory — Documentation interne</div>
+
+  <script>
+const LOGO_PATH = "./assets/logo.png";
+
+    // ----- ICONS -----
+    lucide.createIcons();
+
+    // ----- THEME -----
+    const savedTheme = localStorage.getItem("theme") || "dark";
+    if (savedTheme === "light") document.documentElement.classList.add("light");
+
+    document.getElementById("toggleTheme").onclick = () => {
+      document.documentElement.classList.toggle("light");
+      localStorage.setItem(
+        "theme",
+        document.documentElement.classList.contains("light") ? "light" : "dark"
+      );
+    };
+
+    // ----- LOGO -----
+    const lg = document.getElementById("logo");
+    lg.src = LOGO_PATH;
+    lg.onerror = () => lg.remove();
+
+    // ----- FOOTER YEAR -----
+    document.getElementById("year").textContent = new Date().getFullYear();
+
+    // ----- SCROLL TO ANCHOR -----
+    document.querySelectorAll('a[href^="#"]').forEach(a => {
+      a.addEventListener("click", e => {
+        const id = a.getAttribute("href").slice(1);
+        const el = document.getElementById(id);
+        if (el) {
+          e.preventDefault();
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+          history.pushState(null, "", "#" + id);
+        }
+      });
+    });
+
+    // ----- ACTIVE SECTION HIGHLIGHT -----
+    const observer = new IntersectionObserver(
+      entries => {
+        entries.forEach(entry => {
+          const id = entry.target.getAttribute("id");
+          const link = document.querySelector('.toc a[href="#' + id + '"]');
+          if (link) {
+            if (entry.isIntersecting) {
+              document.querySelectorAll(".toc a").forEach(l => l.classList.remove("active"));
+              link.classList.add("active");
+              link.style.background = "var(--card)";
+              link.style.borderColor = "var(--brand)";
+            } else {
+              link.classList.remove("active");
+              link.style.background = "";
+              link.style.borderColor = "transparent";
+            }
+          }
+        });
+      },
+      { rootMargin: "-20% 0px -70% 0px", threshold: 0.1 }
+    );
+    document.querySelectorAll("main section").forEach(sec => observer.observe(sec));  </script>
+</body>
+</html>

@@ -1,0 +1,557 @@
+# src/api.py
+import os
+import time
+from datetime import datetime, timedelta
+from typing import List, Optional
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, EmailStr
+from sqlalchemy import (
+    Column, Integer, String, DateTime, ForeignKey, Text,
+    create_engine, select, func
+)
+from sqlalchemy.orm import declarative_base, sessionmaker, Session, relationship
+
+import bcrypt
+import jwt  # PyJWT
+
+# RAG deps
+from openai import OpenAI
+from pinecone import Pinecone
+
+load_dotenv()
+
+# =========================
+# ENV / Config
+# =========================
+OPENAI_API_KEY   = os.environ["OPENAI_API_KEY"]
+PINECONE_API_KEY = os.environ["PINECONE_API_KEY"]
+INDEX_NAME       = os.getenv("PINECONE_INDEX", "rag-demo")
+EMBED_MODEL      = os.getenv("EMBED_MODEL", "text-embedding-3-small")
+GEN_MODEL        = os.getenv("GENERATION_MODEL", "gpt-4o")
+
+TOP_K            = int(os.getenv("TOP_K", "12"))
+MIN_SCORE        = float(os.getenv("MIN_SCORE", "0.32"))
+
+DATABASE_URL     = os.getenv("DATABASE_URL", "sqlite:///./rag.db")
+JWT_SECRET       = os.getenv("JWT_SECRET", "change-me-please")
+JWT_EXP_MINUTES  = int(os.getenv("JWT_EXP_MINUTES", "1440"))  # 24h
+ENABLE_CHITCHAT  = (os.getenv("ENABLE_CHITCHAT", "true").lower() == "true")
+
+# =========================
+# Clients
+# =========================
+client = OpenAI(api_key=OPENAI_API_KEY)
+pc     = Pinecone(api_key=PINECONE_API_KEY)
+index  = pc.Index(INDEX_NAME)
+
+# =========================
+# FastAPI + CORS
+# =========================
+app = FastAPI(title="RAG API")
+
+DEV_ORIGINS = [
+    "http://127.0.0.1:8501", "http://localhost:8501",
+    "http://127.0.0.1:5500", "http://localhost:5500",
+    "http://127.0.0.1:3000", "http://localhost:3000",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=DEV_ORIGINS + ["*"],
+    allow_origin_regex=".*",
+    allow_methods=["*"],
+    allow_headers=["*"],
+    allow_credentials=False,
+)
+
+# Ingestion router
+from src.routes_ingest import router as ingest_router
+app.include_router(ingest_router, prefix="/ingest", tags=["ingestion"])
+
+# =========================
+# SQLAlchemy
+# =========================
+Base = declarative_base()
+engine = create_engine(DATABASE_URL, future=True, echo=False)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+class User(Base):
+    __tablename__ = "users"
+    id            = Column(Integer, primary_key=True, index=True)
+    email         = Column(String, unique=True, index=True, nullable=False)
+    name          = Column(String, nullable=False)
+    password_hash = Column(String, nullable=False)
+    created_at    = Column(DateTime, default=datetime.utcnow)
+
+    conversations = relationship("Conversation", back_populates="user", cascade="all,delete")
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+    id         = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    title      = Column(String, nullable=False, default="Nouveau chat")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+    user     = relationship("User", back_populates="conversations")
+    messages = relationship("Message", back_populates="conversation", cascade="all,delete")
+
+class Message(Base):
+    __tablename__ = "messages"
+    id              = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
+    role            = Column(String, nullable=False)  # 'user' | 'assistant'
+    content         = Column(Text, nullable=False)
+    created_at      = Column(DateTime, default=datetime.utcnow)
+
+    conversation = relationship("Conversation", back_populates="messages")
+
+Base.metadata.create_all(bind=engine)
+
+def get_db():
+    db = SessionLocal()
+    try: yield db
+    finally: db.close()
+
+# =========================
+# Auth helpers
+# =========================
+def hash_password(p: str) -> str:
+    return bcrypt.hashpw(p.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+def check_password(p: str, hashed: str) -> bool:
+    try:
+        return bcrypt.checkpw(p.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception:
+        return False
+
+def create_jwt(user_id: int, email: str) -> str:
+    now = datetime.utcnow()
+    payload = {
+        "sub": str(user_id),
+        "email": email,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=JWT_EXP_MINUTES)).timestamp()),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
+def current_user(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> User:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Token manquant.")
+    token = authorization.split(" ", 1)[1].strip()
+    try:
+        data = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        uid = int(data.get("sub", "0"))
+        u = db.get(User, uid)
+        if not u:
+            raise HTTPException(status_code=401, detail="Utilisateur introuvable.")
+        return u
+    except Exception:
+        raise HTTPException(status_code=401, detail="Token invalide.")
+
+# =========================
+# Schemas
+# =========================
+class SignupBody(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+
+class LoginBody(BaseModel):
+    email: EmailStr
+    password: str
+
+class ChatRequest(BaseModel):
+    query: str
+    conversation_id: Optional[int] = None
+
+class ChatResponse(BaseModel):
+    conversation_id: int
+    answer: str
+    sources: List[dict] = []
+    updated_title: Optional[str] = None
+
+class ConversationCreate(BaseModel):
+    title: Optional[str] = "Nouveau chat"
+
+class ConversationUpdate(BaseModel):
+    title: str
+
+class SearchRequest(BaseModel):
+    query: str
+    k: int = 10
+
+# =========================
+# RAG utils
+# =========================
+def embed(text: str) -> list[float]:
+    return client.embeddings.create(model=EMBED_MODEL, input=[text]).data[0].embedding
+
+def _score(m):
+    return m.get("score", 0.0) if isinstance(m, dict) else getattr(m, "score", 0.0)
+
+def _meta(m):
+    return m["metadata"] if isinstance(m, dict) else getattr(m, "metadata", {}) or {}
+
+def search(query: str):
+    qvec = embed(query)
+    res = index.query(vector=qvec, top_k=TOP_K, include_metadata=True, include_values=False)
+    return res.get("matches", []) if isinstance(res, dict) else res.matches
+
+def build_prompt(query: str, passages: list[dict]) -> list[dict]:
+    context = "\n\n".join(
+        f"[{i+1}] {m['metadata']['chunk_text']}" for i, m in enumerate(passages)
+    )
+    system = (
+        "Tu es un assistant RAG. Utilise UNIQUEMENT le CONTEXTE ci-dessous.\n"
+        "Si la réponse n'est pas explicitement présente dans le contexte, réponds EXACTEMENT: "
+        "Réponse pas trouvée dans la base de données.\n"
+        "N'utilise aucune connaissance externe. Réponds en français."
+    )
+    user = f"Question: {query}\n\nCONTEXTE:\n{context}\n\nRéponse:"
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+# -------------------------
+# Titre intelligent (OpenAI)
+# -------------------------
+def generate_smart_title(question: str, answer: str) -> str:
+    """
+    Propose un titre court (<= 48 caractères), en français, clair et sans guillemets.
+    """
+    try:
+        prompt = [
+            {
+                "role": "system",
+                "content": (
+                    "Tu es un assistant qui génère un TITRE CONCIS en français (max 48 caractères) "
+                    "à partir d'une question et d'une réponse. Le titre doit être clair, informatif, "
+                    "sans guillemets ni ponctuation lourde, et tenir sur une ligne."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Question: {question}\n\n"
+                    f"Réponse: {answer}\n\n"
+                    "Rends uniquement le titre, sans guillemets."
+                ),
+            },
+        ]
+        comp = client.chat.completions.create(model=GEN_MODEL, messages=prompt, temperature=0.2, max_tokens=32)
+        title = (comp.choices[0].message.content or "").strip()
+        # Sécurité : tronquer et nettoyer
+        title = title.replace("\n", " ").strip().strip('"').strip("'")
+        if len(title) > 48:
+            title = title[:48].rstrip()
+        return title or (question.strip()[:48] or "Nouveau chat")
+    except Exception:
+        return question.strip()[:48] or "Nouveau chat"
+
+# -------------------------
+# Small-talk / FAQ
+# -------------------------
+from typing import Optional
+
+
+
+
+
+
+
+
+
+
+
+def try_chitchat(q: str) -> Optional[str]:
+    """
+    Renvoie une petite réponse 'small-talk' si la question correspond à un motif simple.
+    NB: 'cv' est interprété comme 'ça va ?' et non 'curriculum vitae'.
+    """
+    if not ENABLE_CHITCHAT:
+        return None
+
+    t = (q or "").strip().lower()
+
+    # --------- Dictionnaires / mots-clés ---------
+    greetings = {
+        "salut","slt","bonjour","bonsoir","hello","hi","coucou","yo","hey","salem","salam"
+    }
+    thanks = {"merci","thanks","thx","thank you","shukran","choukran"}
+    goodbyes = {
+        "au revoir","a plus","à plus","a+","bye","ciao","bonne nuit","bonne soirée","bonne journee","bonne journée"
+    }
+    who_am_i = {
+        "qui es tu","t’es qui","tu es qui","who are you","qui es-tu","c’est qui tu","c est qui tu"
+    }
+    capabilities = {
+        "tu fais quoi","que peux tu faire","que peux-tu faire","tes capacités","tes competences",
+        "tes compétences","what can you do","tu sais faire quoi","a quoi tu sers","à quoi tu sers"
+    }
+    how_it_works = {
+        "comment ça marche","comment ca marche","ca marche comment","how does it work",
+        "mode d'emploi","mode demploi","help","aide","guide","tuto","tutorial","usage","utilisation"
+    }
+    privacy = {
+        "tu gardes mes données","tu stockes mes données","confidentialité","privacy","sécurité des données",
+        "securite des donnees","mes pdf sont ils partages","mes pdf sont-ils partagés","mes données sont elles partagées"
+    }
+    # 'cv' = "ça va ?" (formes familières fréquentes)
+    how_are_you_tokens = {
+        "cv","cv?","cv ?","sa va","sava","ça va","ca va","tu vas bien","vous allez bien","comment tu vas","comment vas tu","comment vas-tu"
+    }
+    reset_chat = {"nouveau chat","new chat","reset","clear","effacer la conversation"}
+
+    # --------- Réponses ---------
+    if any(tok in t for tok in greetings):
+        return "Salut ! 👋 Je suis ton agent **RAG**. Pose ta question ou ajoute un PDF et je chercherai la réponse dans ta base (Pinecone)."
+
+    if any(tok in t for tok in how_are_you_tokens) or t in {"wesh","wesh ?"}:
+        return "Yes, ça va, Et toi ? Prêt(e) à interroger tes documents ?"
+
+    if any(tok in t for tok in thanks) or "merci" in t:
+        return "Avec plaisir ! Si tu veux, je peux te rappeler comment m’utiliser."
+
+    if any(tok in t for tok in goodbyes):
+        return "À bientôt ! 👋 N’hésite pas à revenir si tu as d’autres questions."
+
+    if any(tok in t for tok in who_am_i):
+        return (
+            "Je suis un assistant **RAG** : je réponds à partir de tes PDF ingérés dans Pinecone. "
+            "J’évite les hallucinations : si l’info n’est pas dans ta base, je te le dis clairement."
+        )
+
+    if any(tok in t for tok in capabilities):
+        return (
+            "Je peux :\n"
+            "• Ingerer tes **PDF** (chunk + indexation Pinecone)\n"
+            "• Répondre à tes questions en m’appuyant **uniquement** sur tes documents\n"
+            "• Citer les **sources** (titre/score/chunk) quand c’est disponible\n"
+            "• Gérer des **conversations** (création, renommage, suppression)\n"
+            "• Faire un peu de **small-talk** (salut, ça va, etc.)\n"
+            "Ajoute un PDF puis pose ta question pour voir !"
+        )
+
+    if any(tok in t for tok in how_it_works) or t in {"help ?","help?"}:
+        return (
+            "Fonctionnement ⚙️\n"
+            "1) **Ingestion** : tu ajoutes un PDF → je le découpe en *chunks* → je crée des **embeddings** et je les indexe dans Pinecone.\n"
+            "2) **Recherche** : à chaque question, je retrouve les passages les plus proches (similarité).\n"
+            "3) **Réponse** : je synthétise **uniquement** depuis ces passages.\n"
+            "👉 Ajoute un PDF via *Ajouter PDF*, puis pose ta question."
+        )
+
+    if any(tok in t for tok in privacy):
+        return (
+            "Confidentialité 🔒\n"
+            "• Je n’utilise que tes **embeddings** dans Pinecone (pas tes PDF bruts pendant la recherche).\n"
+            "• Rien n’est partagé publiquement.\n"
+            "• Tu peux **vider** la base en supprimant les vecteurs de l’index.\n"
+            "• Les réponses s’appuient sur tes données, pas sur des infos externes."
+        )
+
+    if any(tok in t for tok in reset_chat):
+        return (
+            "Pour repartir de zéro : clique sur **Nouveau chat** dans la barre latérale. "
+            "Tu peux aussi renommer/supprimer les conversations existantes."
+        )
+
+    # Petites intentions fréquences
+    if t in {"blague","raconte une blague","une blague"}:
+        return "Pourquoi les embeddings n’ont jamais froid ? Parce qu’ils sont toujours **dans l’espace** vectoriel 😅"
+
+    # Si rien ne matche
+    return None
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# =========================
+# Health / Root / Debug
+# =========================
+@app.get("/health")
+def health():
+    return {"status": "ok", "time": int(time.time())}
+
+@app.get("/")
+def root():
+    return {"status": "ok", "ts": int(time.time())}
+
+@app.post("/debug-search")
+def debug_search(req: SearchRequest):
+    qvec = embed(req.query)
+    res = index.query(vector=qvec, top_k=req.k, include_metadata=True, include_values=False)
+    matches = res.get("matches", []) if isinstance(res, dict) else res.matches
+    out = []
+    for m in matches:
+        md = _meta(m)
+        out.append({
+            "title": md.get("document_title"),
+            "score": round(_score(m), 3),
+            "chunk": md.get("chunk_number"),
+            "preview": (md.get("chunk_text") or "")[:400]
+        })
+    return {"matches": out}
+
+# =========================
+# Conversations CRUD
+# =========================
+@app.get("/conversations")
+def list_conversations(u: User = Depends(current_user), db: Session = Depends(get_db)):
+    rows = db.execute(
+        select(Conversation).where(Conversation.user_id == u.id).order_by(Conversation.updated_at.desc())
+    ).scalars().all()
+    return {"items": [
+        {"id": c.id, "title": c.title, "created_at": c.created_at, "updated_at": c.updated_at}
+        for c in rows
+    ]}
+
+@app.post("/conversations")
+def create_conversation(body: ConversationCreate, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    title = (body.title or "Nouveau chat").strip() or "Nouveau chat"
+    c = Conversation(user_id=u.id, title=title, created_at=datetime.utcnow(), updated_at=datetime.utcnow())
+    db.add(c); db.commit(); db.refresh(c)
+    return {"id": c.id, "title": c.title}
+
+@app.patch("/conversations/{cid}")
+def rename_conversation(cid: int, body: ConversationUpdate, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    c = db.get(Conversation, cid)
+    if not c or c.user_id != u.id:
+        raise HTTPException(status_code=404, detail="Conversation introuvable.")
+    c.title = (body.title or "Nouveau chat").strip() or "Nouveau chat"
+    c.updated_at = datetime.utcnow()
+    db.commit(); db.refresh(c)
+    return {"id": c.id, "title": c.title}
+
+@app.delete("/conversations/{cid}")
+def delete_conversation(cid: int, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    c = db.get(Conversation, cid)
+    if not c or c.user_id != u.id:
+        raise HTTPException(status_code=404, detail="Conversation introuvable.")
+    db.delete(c); db.commit()
+    return {"deleted": True}
+
+@app.get("/conversations/{cid}/messages")
+def list_messages(cid: int, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    c = db.get(Conversation, cid)
+    if not c or c.user_id != u.id:
+        raise HTTPException(status_code=404, detail="Conversation introuvable.")
+    msgs = db.execute(
+        select(Message).where(Message.conversation_id == cid).order_by(Message.created_at.asc())
+    ).scalars().all()
+    return {"items": [
+        {"id": m.id, "role": m.role, "content": m.content, "created_at": m.created_at}
+        for m in msgs
+    ]}
+
+# =========================
+# Chat (avec persistance + titre intelligent)
+# =========================
+@app.post("/chat", response_model=ChatResponse)
+def chat(req: ChatRequest, u: User = Depends(current_user), db: Session = Depends(get_db)):
+    # conversation: créer si absente
+    c: Optional[Conversation] = None
+    if req.conversation_id:
+        c = db.get(Conversation, req.conversation_id)
+        if not c or c.user_id != u.id:
+            raise HTTPException(status_code=404, detail="Conversation introuvable.")
+    else:
+        # Titre temporaire = début de question
+        temp_title = (req.query.strip()[:48] or "Nouveau chat")
+        c = Conversation(user_id=u.id, title=temp_title, created_at=datetime.utcnow(), updated_at=datetime.utcnow())
+        db.add(c); db.commit(); db.refresh(c)
+
+    # stocker message user
+    m_user = Message(conversation_id=c.id, role="user", content=req.query, created_at=datetime.utcnow())
+    db.add(m_user)
+
+    # chit-chat
+    small = try_chitchat(req.query)
+    if small:
+        ans_text = small
+        strong = []
+    else:
+        matches = search(req.query)
+        strong = [m for m in matches if _score(m) >= MIN_SCORE]
+        if not strong:
+            ans_text = "Réponse pas trouvée dans la base de données."
+        else:
+            messages = build_prompt(req.query, strong)
+            comp = client.chat.completions.create(model=GEN_MODEL, messages=messages)
+            ans_text = comp.choices[0].message.content.strip()
+            if "Réponse pas trouvée dans la base de données" in ans_text:
+                ans_text = "Réponse pas trouvée dans la base de données."
+
+    # build sources
+    seen, sources = set(), []
+    for m in strong:
+        md = _meta(m)
+        key = (md.get("document_title"), md.get("chunk_number"))
+        if key in seen: continue
+        seen.add(key)
+        sources.append({
+            "title": md.get("document_title"),
+            "score": round(_score(m), 3),
+            "chunk": md.get("chunk_number"),
+        })
+
+    # stocker assistant + MAJ conv
+    m_assistant = Message(conversation_id=c.id, role="assistant", content=ans_text, created_at=datetime.utcnow())
+    db.add(m_assistant)
+    c.updated_at = datetime.utcnow()
+
+    updated_title = None
+    # Si c'est le 1er échange (2 messages au total) → générer un titre intelligent
+    total_msgs = db.execute(select(func.count(Message.id)).where(Message.conversation_id == c.id)).scalar_one()
+    if total_msgs == 2:
+        smart = generate_smart_title(req.query, ans_text)
+        if smart and smart != c.title:
+            c.title = smart
+            updated_title = smart
+
+    db.commit(); db.refresh(c)
+
+    return ChatResponse(
+        conversation_id=c.id,
+        answer=ans_text,
+        sources=sources,
+        updated_title=updated_title
+    )
+
+# =========================
+# Auth (signup / login)
+# =========================
+@app.post("/auth/signup")
+def signup(body: SignupBody, db: Session = Depends(get_db)):
+    if db.scalar(select(User).where(User.email == body.email)):
+        raise HTTPException(status_code=400, detail="Email déjà utilisé.")
+    u = User(
+        email=body.email,
+        name=body.name.strip() or body.email.split("@")[0],
+        password_hash=hash_password(body.password),
+        created_at=datetime.utcnow(),
+    )
+    db.add(u); db.commit(); db.refresh(u)
+    token = create_jwt(u.id, u.email)
+    return {"token": token, "user": {"id": u.id, "email": u.email, "name": u.name}}
+
+@app.post("/auth/login")
+def login(body: LoginBody, db: Session = Depends(get_db)):
+    u = db.scalar(select(User).where(User.email == body.email))
+    if not u or not check_password(body.password, u.password_hash):
+        raise HTTPException(status_code=401, detail="Identifiants invalides.")
+    token = create_jwt(u.id, u.email)
+    return {"token": token, "user": {"id": u.id, "email": u.email, "name": u.name}}

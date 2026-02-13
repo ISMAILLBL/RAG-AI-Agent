@@ -1,0 +1,26 @@
+* My Project:
+
+*** Installations nécessaires: pip install -r requirements.txt
+
+
+*** Backend: uvicorn src.api:app --reload --port 8000
+ou *** Backend: python -m uvicorn src.api:app --reload --port 8000 --host 127.0.0.1
+---> http://127.0.0.1:8000/docs (Swagger)
+
+
+*** Streamlit: streamlit run app.py
+---> http://localhost:8501/
+
+
+*** HTML Page: python -m http.server 5500
+---> http://127.0.0.1:5500/
+
+
+
+
+
+* UI Agent:
+
+1. npx create-agent-ui@latest
+2. cd agent-ui
+3. npm run dev

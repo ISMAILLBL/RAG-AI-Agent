@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <title>RAG Agent • Accueil</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    /* ---------- Thème & Design System (cohérent avec login/chat) ---------- */
+    :root{
+      --bg:#0b1220; --panel:#0f172a; --card:#0d1426; --muted:#93a0b8; --text:#e6e9f2;
+      --border:#1e2a40; --brand:#22c55e; --brand-2:#16a34a; --danger:#ef4444;
+      --input:#0b1326; --ring:0 0 0 3px rgba(34,197,94,.25); --shadow:0 10px 30px rgba(0,0,0,.25);
+      --grad1: radial-gradient(1200px 800px at 120% -20%, rgba(59,130,246,.10), transparent);
+      --grad2: radial-gradient(900px 600px at -10% 120%, rgba(34,197,94,.10), transparent);
+    }
+    .light:root{
+      --bg:#f5f7fb; --panel:#ffffff; --card:#ffffff; --muted:#566079; --text:#101524;
+      --border:#e7ebf2; --brand:#16a34a; --brand-2:#15803d; --danger:#dc2626;
+      --input:#f1f5f9; --ring:0 0 0 3px rgba(34,197,94,.20); --shadow:0 8px 24px rgba(15,23,42,.08);
+      --grad1: radial-gradient(1200px 800px at 120% -20%, rgba(59,130,246,.10), transparent);
+      --grad2: radial-gradient(900px 600px at -10% 120%, rgba(34,197,94,.10), transparent);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;
+      color:var(--text);
+      background: var(--grad1), var(--grad2), var(--bg);
+      overflow-x:hidden;
+    }
+
+    /* ---------- Header ---------- */
+    .header{
+      position:sticky; top:0; z-index:50;
+      display:flex; align-items:center; justify-content:space-between;
+      gap:12px; padding:14px 18px; background:linear-gradient(180deg, rgba(0,0,0,.18), transparent);
+      border-bottom:1px solid rgba(255,255,255,.05);
+      backdrop-filter: blur(6px);
+    }
+    .brand{
+      display:flex; align-items:center; gap:10px; font-weight:800; font-size:18px;
+    }
+    .brand img{ height:34px; width:auto; display:block }
+    .actions{ display:flex; align-items:center; gap:10px }
+    .btn{
+      border:1px solid var(--border); background:var(--panel); color:var(--text);
+      padding:10px 14px; border-radius:12px; cursor:pointer; display:flex; gap:8px; align-items:center;
+    }
+    .btn.primary{ background:var(--brand); color:#fff; border-color:var(--brand-2); font-weight:700 }
+    .btn:hover{ filter:brightness(1.05) }
+    .icon-btn{ border:1px solid var(--border); background:var(--panel); color:var(--text); padding:10px 12px; border-radius:10px; cursor:pointer }
+
+    /* ---------- Hero ---------- */
+    .hero{
+      position:relative; overflow:hidden;
+      padding:54px 18px 24px; display:grid; grid-template-columns: 1.1fr 1fr; gap:24px;
+      max-width:1200px; margin:0 auto;
+    }
+    @media (max-width: 980px){
+      .hero{ grid-template-columns: 1fr; padding-top:32px }
+    }
+
+    .hero-left{
+      display:flex; flex-direction:column; gap:18px; justify-content:center;
+      min-height:420px;
+    }
+    .logo-badge{
+      display:flex; flex-direction:column; align-items:center; gap:8px; user-select:none;
+    }
+    .logo-badge .circle{
+      width:120px; height:120px; border-radius:999px; display:grid; place-items:center;
+      background:linear-gradient(180deg, rgba(34,197,94,.18), transparent), var(--card);
+      border:1px solid var(--border); box-shadow:var(--shadow);
+      transform: translateZ(0);
+      animation: float 6s ease-in-out infinite;
+    }
+    .logo-badge img{
+      width:72px; height:72px; object-fit:contain; display:block;
+      filter: drop-shadow(0 4px 10px rgba(0,0,0,.35));
+    }
+    .logo-caption{ font-size:20px; font-weight:800; letter-spacing:.2px }
+
+    .hero h1{
+      font-size: clamp(28px, 5vw, 46px);
+      margin:10px 0 0;
+      line-height:1.1;
+      letter-spacing:.2px;
+    }
+    .hero p.lead{
+      margin: 6px 0 0; color: var(--muted); font-size: clamp(15px, 2.4vw, 18px);
+      max-width: 60ch; line-height:1.6;
+    }
+    .cta{
+      margin-top: 14px; display:flex; flex-wrap:wrap; align-items:center; gap:10px;
+    }
+
+    .hero-right{
+      position:relative; min-height:420px;
+      display:grid; place-items:center;
+      perspective:1000px;
+    }
+    .scene{
+      position:relative; width:100%; max-width:520px; height:360px;
+      border:1px solid var(--border); border-radius:16px; background:var(--panel);
+      box-shadow:var(--shadow); overflow:hidden; transform-style:preserve-3d;
+      animation: pop .6s ease-out both;
+    }
+    .scene .glow{
+      position:absolute; inset:-20%;
+      background:
+        radial-gradient(500px 280px at 20% 20%, rgba(34,197,94,.15), transparent),
+        radial-gradient(420px 240px at 80% 80%, rgba(59,130,246,.12), transparent);
+      filter:blur(12px);
+    }
+    .chips{
+      position:absolute; inset:0; padding:18px; display:flex; gap:10px; flex-wrap:wrap;
+    }
+    .chip{
+      border:1px solid var(--border); background:var(--card); color:var(--text);
+      padding:9px 12px; border-radius:12px; display:flex; gap:8px; align-items:center;
+      box-shadow: var(--shadow); transform: translateZ(30px); opacity:.95;
+    }
+
+    /* ---------- Sections ---------- */
+    .section{
+      max-width:1200px; margin: 24px auto; padding: 0 18px;
+    }
+    .cards{
+      display:grid; gap:14px; grid-template-columns: repeat(3, 1fr);
+    }
+    @media (max-width: 980px){ .cards{ grid-template-columns: 1fr } }
+    .card{
+      border:1px solid var(--border); background:var(--panel); border-radius:16px; padding:16px;
+      box-shadow: var(--shadow);
+    }
+    .card h3{ margin:0 0 8px; font-size:18px }
+    .muted{ color:var(--muted) }
+
+    .steps{
+      display:grid; gap:14px; grid-template-columns: repeat(3, 1fr);
+      margin-top: 8px;
+    }
+    @media (max-width: 980px){ .steps{ grid-template-columns: 1fr } }
+    .step{
+      border:1px dashed var(--border); background:var(--card); border-radius:14px; padding:16px;
+    }
+    .step .n{ font-weight:800; color:var(--brand) }
+
+    .footer{
+      margin: 28px auto 24px; text-align:center; color:var(--muted); font-size:14px;
+    }
+
+    /* ---------- Animations ---------- */
+    @keyframes float{
+      0%,100%{ transform: translateY(0) }
+      50%{ transform: translateY(-8px) }
+    }
+    @keyframes pop{
+      from{ transform: translateY(10px) scale(.98); opacity:0 }
+      to{ transform: translateY(0) scale(1); opacity:1 }
+    }
+
+    /* ---------- Tooltips stylisés ---------- */
+    .tt{ position:relative }
+    .tt[data-tt]:hover:after, .tt[data-tt]:hover:before{ opacity:1; transform:translate(-50%,0); pointer-events:none }
+    .tt[data-tt]:after{
+      content: attr(data-tt);
+      position:absolute; left:50%; bottom: calc(100% + 8px);
+      transform: translate(-50%, 6px);
+      background: var(--panel); color: var(--text);
+      border:1px solid var(--border); border-radius:10px; padding:8px 10px;
+      font-size:12px; white-space:nowrap; box-shadow: var(--shadow);
+      opacity:0; transition: .15s ease;
+      z-index:60;
+    }
+    .tt[data-tt]:before{
+      content:"";
+      position:absolute; left:50%; bottom: 100%;
+      transform: translate(-50%, 6px);
+      border:6px solid transparent; border-top-color: var(--border);
+      opacity:0; transition:.15s ease;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="brand">
+      <img id="logo" alt="logo"/>
+      <span>RAG Agent</span>
+    </div>
+    <div class="actions">
+      <button id="toggleTheme" class="icon-btn tt" data-tt="Mode clair/sombre">
+        <i data-lucide="sun-moon"></i>
+      </button>
+      <!-- ✅ Nouveau bouton A propos -->
+      <button id="goAbout" class="btn tt" data-tt="En savoir plus sur l’agent">
+        <i data-lucide="info"></i> À propos
+      </button>
+      <button id="goLoginTop" class="btn primary"><i data-lucide="user-plus"></i> Créer un compte</button>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-left">
+      <div class="logo-badge">
+        <div class="circle tt" data-tt="Logo IDEO Factory">
+          <img id="heroLogo" alt="logo entreprise"/>
+        </div>
+        <div class="logo-caption">RAG Agent</div>
+      </div>
+
+      <h1>Votre agent de questions-réponses, 100% propulsé par vos documents.</h1>
+      <p class="lead">
+        Ingestez vos PDF, posez vos questions, obtenez des réponses fiables issues de votre
+        base vectorielle Pinecone. Auth sécurisée, interface moderne, et un chat fluide.
+      </p>
+
+      <div class="cta">
+        <button id="startBtn" class="btn primary"><i data-lucide="rocket"></i> Créer un compte pour commencer</button>
+        <button id="toLogin" class="btn tt" data-tt="Déjà inscrit ? Se connecter"><i data-lucide="log-in"></i> Se connecter</button>
+      </div>
+    </div>
+
+    <div class="hero-right">
+      <div id="scene" class="scene tt" data-tt="Aperçu conceptuel">
+        <div class="glow"></div>
+        <div class="chips" id="chips">
+          <div class="chip" style="transform:translateZ(30px) translate(0,0)"><i data-lucide="file-text"></i> PDF Ingestion</div>
+          <div class="chip" style="transform:translateZ(42px) translate(10px,0)"><i data-lucide="database"></i> Pinecone</div>
+          <div class="chip" style="transform:translateZ(60px) translate(0,0)"><i data-lucide="shield-check"></i> JWT Auth</div>
+          <div class="chip" style="transform:translateZ(36px) translate(0,0)"><i data-lucide="bot"></i> Chat RAG</div>
+          <div class="chip" style="transform:translateZ(48px) translate(0,0)"><i data-lucide="wand-2"></i> Embeddings</div>
+          <div class="chip" style="transform:translateZ(38px) translate(0,0)"><i data-lucide="sun-moon"></i> Dark / Light</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="section">
+    <div class="cards">
+      <div class="card">
+        <h3><i data-lucide="lock"></i> Authentification sécurisée</h3>
+        <p class="muted">Inscription/connexion avec JWT, gestion de sessions côté front, et accès protégé aux endpoints.</p>
+      </div>
+      <div class="card">
+        <h3><i data-lucide="upload-cloud"></i> Ingestion intelligente</h3>
+        <p class="muted">Découpage des PDF en chunks, vectorisation, indexation Pinecone. Questions → contexte pertinent.</p>
+      </div>
+      <div class="card">
+        <h3><i data-lucide="message-circle"></i> Chat naturel</h3>
+        <p class="muted">Réponses contextualisées à partir de vos documents, small-talk activable pour les échanges courants.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="section">
+    <h2 style="margin:0 0 8px; font-size:22px">Comment ça marche ?</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="n">1</div>
+        <h3>Créez votre compte</h3>
+        <p class="muted">Accédez à l’interface sécurisée et configurez votre environnement.</p>
+      </div>
+      <div class="step">
+        <div class="n">2</div>
+        <h3>Ingestez vos PDF</h3>
+        <p class="muted">Ajoutez des documents, ils sont vectorisés et indexés dans Pinecone.</p>
+      </div>
+      <div class="step">
+        <div class="n">3</div>
+        <h3>Posez vos questions</h3>
+        <p class="muted">Le chatbot retrouve les passages pertinents et génère des réponses fiables.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer">© <span id="year"></span> IDEO Factory — Prototype interne RAG</div>
+
+<script>
+  /* ---------- Icons ---------- */
+  try{ lucide.createIcons(); }catch{}
+
+  /* ---------- Logo paths ---------- */
+  const LOGO_PATH = "./assets/logo.png"; // ton logo d’entreprise
+  const logo = document.getElementById("logo");
+  const heroLogo = document.getElementById("heroLogo");
+  [logo, heroLogo].forEach(el=>{
+    el.src = LOGO_PATH;
+    el.onerror = ()=> el.remove();
+  });
+
+  /* ---------- Theme toggle ---------- */
+  const savedTheme = localStorage.getItem("theme") || "dark";
+  if(savedTheme==="light") document.documentElement.classList.add("light");
+  document.getElementById("toggleTheme").onclick = ()=>{
+    document.documentElement.classList.toggle("light");
+    localStorage.setItem("theme", document.documentElement.classList.contains("light")?"light":"dark");
+  };
+
+  /* ---------- CTA -> login.html ---------- */
+  const goLogin = ()=> location.href = "login.html";
+  document.getElementById("startBtn").onclick = goLogin;
+  document.getElementById("toLogin").onclick = goLogin;
+  document.getElementById("goLoginTop").onclick = goLogin;
+
+  /* ---------- Nouveau: bouton À propos -> documentation.html ---------- */
+  document.getElementById("goAbout").onclick = ()=> location.href = "documentation.html";
+
+  /* ---------- Footer year ---------- */
+  document.getElementById("year").textContent = new Date().getFullYear();
+
+  /* ---------- Parallax / 3D micro-interaction ---------- */
+  const scene = document.getElementById("scene");
+  const chips = document.getElementById("chips");
+  const lerp = (a,b,t)=> a+(b-a)*t;
+  let rx=0, ry=0, tx=0, ryTarget=0; // rotation actual/targets
+
+  function onMove(e){
+    const rect = scene.getBoundingClientRect();
+    const cx = rect.left + rect.width/2;
+    const cy = rect.top + rect.height/2;
+    const dx = (e.clientX - cx) / rect.width;  // -0.5..0.5+
+    const dy = (e.clientY - cy) / rect.height; // -0.5..0.5+
+    tx = dy * 8;                  // rotateX target
+    ryTarget = -dx * 8;           // rotateY target
+  }
+  function animate(){
+    rx = lerp(rx, tx, .08);
+    ry = lerp(ry, ryTarget, .08);
+    scene.style.transform = `rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg)`;
+    requestAnimationFrame(animate);
+  }
+  scene.addEventListener("mousemove", onMove);
+  scene.addEventListener("mouseleave", ()=>{ tx=0; ryTarget=0; });
+  animate();
+
+  /* ---------- Subtle floating for chips ---------- */
+  const chipEls = [...document.querySelectorAll(".chip")];
+  let t=0;
+  function floatChips(){
+    t += 0.016;
+    chipEls.forEach((c,i)=>{
+      const dz = 30 + (i%5)*6;
+      const ty = Math.sin(t + i)*3;
+      c.style.transform = `translateZ(${dz}px) translate(0,${ty}px)`;
+    });
+    requestAnimationFrame(floatChips);
+  }
+  floatChips();
+</script>
+</body>
+</html>

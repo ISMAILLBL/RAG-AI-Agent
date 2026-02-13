@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <title>RAG Agent • Chat</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    :root{
+      --bg:#0b1220; --panel:#0f172a; --card:#0d1426; --muted:#93a0b8; --text:#e6e9f2;
+      --border:#1e2a40; --brand:#22c55e; --brand-2:#16a34a; --danger:#ef4444;
+      --input:#0b1326; --bubble:#0f1a32; --bubble-me:#052e1d; --ring:0 0 0 3px rgba(34,197,94,.25);
+      --shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    .light:root{
+      --bg:#f5f7fb; --panel:#ffffff; --card:#ffffff; --muted:#566079; --text:#101524;
+      --border:#e7ebf2; --brand:#16a34a; --brand-2:#15803d; --danger:#dc2626;
+      --input:#f1f5f9; --bubble:#f2f5fb; --bubble-me:#eafcf2; --ring:0 0 0 3px rgba(34,197,94,.20);
+      --shadow: 0 8px 24px rgba(15,23,42,.08);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;
+      color:var(--text); background:
+        radial-gradient(1200px 800px at 120% -20%, rgba(59,130,246,.08), transparent),
+        radial-gradient(900px 600px at -10% 120%, rgba(34,197,94,.08), transparent),
+        var(--bg);
+      display:grid; grid-template-columns: 320px 1fr; grid-template-rows: 64px 1fr auto;
+      grid-template-areas: "sidebar header" "sidebar main" "sidebar composer";
+    }
+    .sidebar{ grid-area: sidebar; border-right:1px solid var(--border); background:var(--panel); padding:12px; overflow:auto; transition:transform .2s }
+    .sidebar.collapsed{ transform:translateX(-100%) }
+    .side-head{ display:flex;align-items:center;gap:10px;margin-bottom:10px }
+    .hamburger{ border:1px solid var(--border); background:var(--panel); color:var(--text); border-radius:10px; padding:8px 10px; cursor:pointer }
+    .btn-new{
+      width:100%; display:flex; align-items:center; gap:10px; justify-content:center;
+      border:1px dashed var(--border); background:var(--card); color:var(--text);
+      border-radius:14px; padding:12px; font-weight:600; cursor:pointer; box-shadow:var(--shadow)
+    }
+    .search{ display:flex;align-items:center;gap:8px;margin:12px 0; background:var(--input); border:1px solid var(--border); border-radius:12px; padding:10px 12px }
+    .search input{ flex:1; border:none; outline:none; background:transparent; color:var(--text)}
+    .conv-list{ display:flex; flex-direction:column; gap:8px }
+    .conv-item{ display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--border); background:var(--card); border-radius:12px; cursor:pointer }
+
+    /* ✅ correction ellipse propre du titre */
+    .row-main{ display:flex; align-items:center; gap:10px; flex:1; min-width:0; }
+
+    .conv-item.active{ outline:2px solid rgba(34,197,94,.35) }
+    .conv-title{
+      flex:1;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      min-width:0; /* ceinture et bretelles */
+    }
+    .icon-btn{ border:none; background:transparent; color:var(--muted); cursor:pointer; padding:6px; border-radius:8px }
+    .icon-btn:hover{ background:rgba(148,163,184,.12); color:var(--text) }
+
+    .header{ grid-area: header; border-bottom:1px solid var(--border); background:linear-gradient(180deg, rgba(255,255,255,.03), transparent), var(--panel); display:flex; align-items:center; justify-content:space-between; padding:0 16px; }
+    .brand{ display:flex; align-items:center; gap:10px; font-weight:800; font-size:20px }
+    .brand img{ height:28px }
+    .status{ display:flex; align-items:center; gap:8px; color:var(--muted); font-size:14px }
+    .dot{ width:10px; height:10px; border-radius:999px; background:#aaa }
+    .dot.ok{ background:#22c55e } .dot.bad{ background:#f59e0b }
+    .right{ display:flex; align-items:center; gap:10px }
+    .pill{ border:1px solid var(--border); background:var(--panel); border-radius:12px; padding:8px 10px; display:flex; align-items:center; gap:8px }
+    .avatar{ width:34px; height:34px; border-radius:999px; display:grid; place-items:center; font-weight:700; background:linear-gradient(180deg,rgba(34,197,94,.25),transparent), var(--card); border:1px solid var(--border) }
+
+    .main{ grid-area: main; padding:22px; overflow:auto; background: radial-gradient(900px 600px at 30% 10%, rgba(255,255,255,.04), transparent); }
+    .msg{ max-width:920px; margin:0 auto 14px; display:flex; gap:12px }
+    .msg.me{ flex-direction: row-reverse }
+    .bubble{ max-width: 85%; padding:12px 14px; border-radius:14px; border:1px solid var(--border); background:var(--bubble) }
+    .me .bubble{ background:var(--bubble-me); }
+    .label{ font-size:12px; color:var(--muted); margin:0 0 6px 2px }
+    details.sources{ margin-top:8px; }
+    details.sources summary{ cursor:pointer; color:var(--muted) }
+    .src-list{ margin:8px 0 0 12px; font-size:14px; color:var(--muted) }
+
+    .composer{ grid-area: composer; border-top:1px solid var(--border); background:var(--panel); padding:14px 18px; display:flex; align-items:center; justify-content:center; }
+    .compose{ width: min(1100px, 96%); display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--border); border-radius:16px; padding:8px 10px; box-shadow: var(--shadow) }
+    .compose .left{ display:flex; align-items:center; gap:8px }
+    .compose input[type="file"]{ display:none }
+    .chip{ border:1px solid var(--border); background:var(--panel); color:var(--text); padding:8px 10px; border-radius:12px; display:flex; align-items:center; gap:8px; cursor:pointer }
+    .textbox{ flex:1; border:none; outline:none; background:transparent; color:var(--text); font-size:16px }
+    .send{ display:flex; align-items:center; gap:8px; background:var(--brand); color:white; font-weight:700; border:none; border-radius:12px; padding:10px 16px; cursor:pointer }
+    .small{ font-size:12px; color:var(--muted); margin-top:8px; text-align:center }
+
+    .toast{ position:fixed; right:16px; bottom:16px; background:var(--panel); border:1px solid var(--border); padding:10px 14px; border-radius:12px; box-shadow:var(--shadow); color:var(--text) }
+    .hidden{ display:none }
+
+    @media (max-width: 980px){
+      body{ grid-template-columns: 0 1fr; }
+      .sidebar{ position:fixed; z-index:20; top:0; left:0; bottom:0; width:310px }
+    }
+  </style>
+</head>
+<body>
+  <aside id="sidebar" class="sidebar">
+    <div class="side-head">
+      <button id="btnHideSidebar" class="hamburger" title="Replier"><i data-lucide="panel-left-close"></i></button>
+      <div class="muted">Menu</div>
+    </div>
+    <button id="btnNewChat" class="btn-new"><i data-lucide="plus"></i> Nouveau chat</button>
+    <div class="search"><i data-lucide="search"></i><input id="qSearch" placeholder="Rechercher une conversation..."/></div>
+    <div id="conversations" class="conv-list"></div>
+  </aside>
+
+  <header class="header">
+    <div class="left"><button id="btnShowSidebar" class="hamburger" title="Afficher le menu"><i data-lucide="panel-right-open"></i></button></div>
+    <div class="brand">
+      <img id="logo" alt="logo"/>
+      <span>RAG Agent</span>
+      <span class="status"><span id="apiDot" class="dot"></span><span id="apiText">API...</span></span>
+    </div>
+    <div class="right">
+      <div class="pill">
+        <button id="btnTheme" class="icon-btn" title="Mode clair/sombre"><i data-lucide="sun-moon"></i></button>
+        <span id="modeLabel" class="muted"></span>
+      </div>
+      <div class="pill">
+        <div id="avatar" class="avatar">U</div>
+        <button id="btnLogout" class="icon-btn" title="Se déconnecter"><i data-lucide="log-out"></i></button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="main"></main>
+
+  <div class="composer">
+    <div class="compose">
+      <div class="left">
+        <label class="chip" for="pdfInput"><i data-lucide="plus"></i> Ajouter PDF</label>
+        <input id="pdfInput" type="file" accept="application/pdf" multiple/>
+      </div>
+      <input id="prompt" class="textbox" placeholder="Écris ta question…"/>
+      <button id="btnSend" class="send"><i data-lucide="send"></i> Envoyer</button>
+    </div>
+  </div>
+
+  <div id="footInfo" class="small"></div>
+  <div id="toast" class="toast hidden"></div>
+
+<script>
+/* ---------- CONFIG ---------- */
+const LOGO_PATH = "./assets/logo.png";
+const DEFAULT_BACKEND = localStorage.getItem("backend_url") || "http://127.0.0.1:8000";
+
+/* ---------- STATE ---------- */
+let token = localStorage.getItem("token") || "";
+let user  = JSON.parse(localStorage.getItem("user") || "{}");
+let backend = DEFAULT_BACKEND;
+let conversations = [];
+let currentConvId = null;
+let messagesByConv = {};
+let searchText = "";
+
+/* ---------- HELPERS ---------- */
+const $ = s=>document.querySelector(s);
+const $$= s=>document.querySelectorAll(s);
+function iconize(){ try{ lucide.createIcons(); }catch{} }
+function toast(msg, ok=true){
+  const el=$("#toast"); el.textContent=msg; el.classList.remove("hidden");
+  el.style.borderColor= ok ? "var(--border)" : "var(--danger)";
+  el.style.color     = ok ? "var(--text)"  : "var(--danger)";
+  setTimeout(()=>el.classList.add("hidden"), 2600);
+}
+function setApiStatus(ok){ $("#apiDot").classList.toggle("ok", !!ok); $("#apiDot").classList.toggle("bad", !ok); $("#apiText").textContent= ok?"API OK":"API indisponible"; }
+function setModeLabel(){ $("#modeLabel").textContent = document.documentElement.classList.contains("light")?"Clair":"Sombre"; }
+function authHeaders(){ return token ? {"Authorization":"Bearer "+token} : {}; }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function linkify(t){ return t.replace(/(https?:\/\/[^\s)]+)(?![^<]*>)/g,'<a href="$1" target="_blank">$1</a>'); }
+
+/* Utilisé UNIQUEMENT pour les sélecteurs CSS, pas pour stocker l'ID */
+function cssSel(s){
+  const v = String(s);
+  if (window.CSS && CSS.escape) return CSS.escape(v);
+  return v.replace(/["\\]/g,'\\$&');
+}
+
+/* ---------- THEME & HEADER ---------- */
+(function(){
+  const t = localStorage.getItem("theme") || "dark";
+  if(t==="light") document.documentElement.classList.add("light");
+  setModeLabel(); $("#btnTheme").onclick=()=>{ document.documentElement.classList.toggle("light"); localStorage.setItem("theme", document.documentElement.classList.contains("light")?"light":"dark"); setModeLabel(); };
+  const lg=$("#logo"); lg.src=LOGO_PATH; lg.onerror=()=>lg.remove();
+  const initials=(user?.name||user?.email||"U").trim()[0]?.toUpperCase()||"U"; $("#avatar").textContent=initials;
+  $("#btnLogout").onclick=()=>{ localStorage.removeItem("token"); localStorage.removeItem("user"); location.href="login.html"; };
+  $("#btnShowSidebar").onclick=()=> $("#sidebar").classList.remove("collapsed");
+  $("#btnHideSidebar").onclick=()=> $("#sidebar").classList.add("collapsed");
+})();
+
+/* ---------- HTTP HELPERS ---------- */
+async function safeJson(res){
+  const ct = res.headers.get("content-type") || "";
+  if (res.status === 204) return null;
+  try { return await res.json(); } catch { return null; }
+}
+async function tryFetchJson(paths, opt={}){
+  let lastErr;
+  for(const p of paths){
+    try{
+      const res = await fetch(backend + p, {...opt, headers:{...(opt.headers||{}), ...authHeaders()}});
+      if(res.status===401){ location.href="login.html"; throw new Error("401"); }
+      if(res.ok) return await safeJson(res);
+      lastErr = new Error((await safeJson(res))?.detail || res.statusText);
+    }catch(e){ lastErr = e; }
+  }
+  throw lastErr || new Error("Not Found");
+}
+async function tryFetchVoid(paths, opt={}){
+  let lastErr;
+  for(const p of paths){
+    try{
+      const res = await fetch(backend + p, {...opt, headers:{...(opt.headers||{}), ...authHeaders()}});
+      if(res.status===401){ location.href="login.html"; throw new Error("401"); }
+      if(res.ok) return true;
+      lastErr = new Error((await safeJson(res))?.detail || res.statusText);
+    }catch(e){ lastErr = e; }
+  }
+  throw lastErr || new Error("Not Found");
+}
+
+/* ---------- CONVERSATIONS ---------- */
+function normalizeConversations(items=[]){
+  return items.map(it=>{
+    const id = it.id ?? it._id ?? it.uuid ?? it.conversationId ?? it.conversation_id;
+    const title = it.title ?? it.name ?? "Nouveau chat";
+    return { id: id != null ? String(id) : null, title };
+  }).filter(x=>!!x.id);
+}
+
+async function listConversations(selectId=null){
+  try{
+    const data = await tryFetchJson(
+      ["/conversations", "/conversation"],
+      { method:"GET" }
+    );
+    const items = data?.items ?? data ?? [];
+    conversations = normalizeConversations(items);
+  }catch{
+    if(conversations.length===0) conversations=[{id:"local-1",title:"Nouveau chat"}];
+  }
+  renderConversations(selectId);
+}
+
+async function createConversation(title="Nouveau chat"){
+  const body = JSON.stringify({title});
+  const data = await tryFetchJson(
+    ["/conversations", "/conversation"],
+    { method:"POST", headers:{"Content-Type":"application/json"}, body }
+  );
+  const created = Array.isArray(data) ? data[0] : data;
+  const id = created?.id ?? created?._id ?? created?.uuid ?? created?.conversationId ?? created?.conversation_id;
+  return id != null ? String(id) : null;
+}
+
+async function renameConversation(id,title){
+  const payload = JSON.stringify({title});
+  await tryFetchVoid(
+    [
+      `/conversations/${encodeURIComponent(id)}`,
+      `/conversation/${encodeURIComponent(id)}`
+    ],
+    { method:"PATCH", headers:{"Content-Type":"application/json"}, body:payload }
+  ).catch(async ()=>{
+    await tryFetchVoid(
+      [
+        `/conversations/${encodeURIComponent(id)}`,
+        `/conversation/${encodeURIComponent(id)}`
+      ],
+      { method:"PUT", headers:{"Content-Type":"application/json"}, body:payload }
+    );
+  });
+}
+
+async function deleteConversation(id){
+  await tryFetchVoid(
+    [
+      `/conversations/${encodeURIComponent(id)}`,
+      `/conversation/${encodeURIComponent(id)}`
+    ],
+    { method:"DELETE" }
+  );
+}
+
+async function fetchMessages(id){
+  const data = await tryFetchJson(
+    [
+      `/conversations/${encodeURIComponent(id)}/messages`,
+      `/conversation/${encodeURIComponent(id)}/messages`
+    ],
+    { method:"GET" }
+  );
+  const items = data?.items ?? data ?? [];
+  messagesByConv[id] = items.map(m=>{
+    const role = m.role ?? m.author ?? (m.isUser ? "user" : "assistant") ?? "assistant";
+    const content = m.content ?? m.text ?? m.message ?? "";
+    const sources = m.sources ?? [];
+    return { role, content, sources };
+  });
+  renderMessages(id);
+}
+
+/* ---------- CHAT ---------- */
+async function sendMessage(q){
+  if(!currentConvId){
+    currentConvId = await createConversation((q||"").slice(0,48) || "Nouveau chat");
+    await listConversations(currentConvId);
+  }
+  addLocalMessage(currentConvId,{role:"user",content:q}); renderMessages(currentConvId,true);
+
+  try{
+    const body = JSON.stringify({ query:q, conversation_id:currentConvId, conversationId:currentConvId });
+    const data = await tryFetchJson(
+      ["/chat"],
+      { method:"POST", headers:{"Content-Type":"application/json"}, body }
+    );
+    addLocalMessage(currentConvId,{
+      role:"assistant",
+      content:data?.answer || data?.message || "",
+      sources:data?.sources || []
+    });
+    renderMessages(currentConvId,true);
+    await listConversations(currentConvId);
+  }catch(e){
+    addLocalMessage(currentConvId,{role:"assistant",content:"❌ "+(e.message||"Erreur API")});
+    renderMessages(currentConvId,true);
+  }
+}
+
+/* ---------- UPLOAD PDF ---------- */
+async function uploadSelected(files){
+  if(!files || !files.length) return;
+  const form = new FormData();
+  if(files.length>1){ [...files].forEach(f=>form.append("files", f, f.name)); }
+  else{ form.append("file", files[0], files[0].name); }
+
+  try{
+    let data=null;
+    if(files.length>1){
+      data = await tryFetchJson(
+        ["/ingest/upload-multi","/ingest"],
+        { method:"POST", body: form }
+      );
+    }else{
+      data = await tryFetchJson(
+        ["/ingest/upload","/ingest"],
+        { method:"POST", body: form }
+      );
+    }
+    if(files.length>1){
+      const ok = (data?.items||[]).filter(x=>x.status==="ok").length;
+      toast(`PDFs ingérés: ${ok}/${files.length} ✅`);
+    }else{
+      toast(`PDF ingéré: ${files[0].name} ✅`);
+    }
+  }catch(e){
+    toast("Échec upload: "+(e.message||"network"), false);
+  }
+}
+
+/* ---------- RENDER ---------- */
+function renderConversations(selectId=null){
+  const list=$("#conversations"); list.innerHTML="";
+  const filtered = conversations.filter(c=>!searchText || (c.title||"").toLowerCase().includes(searchText));
+  list.innerHTML = filtered.map(c=>{
+    const active = (selectId? (c.id===selectId) : (c.id===currentConvId)) ? "active" : "";
+    return `
+      <div class="conv-item ${active}" data-cid="${String(c.id)}">
+        <div class="row-main">
+          <i data-lucide="message-square"></i>
+          <div class="conv-title">${escapeHtml(c.title||"Nouveau chat")}</div>
+        </div>
+        <button class="icon-btn btn-rename" title="Renommer" data-action="rename"><i data-lucide="pencil"></i></button>
+        <button class="icon-btn btn-del" title="Supprimer" data-action="delete"><i data-lucide="trash-2"></i></button>
+      </div>`;
+  }).join("") || `<div class="muted" style="padding:10px">Aucune conversation</div>`;
+  iconize();
+
+  if(selectId){ currentConvId = selectId; }
+  else if(!currentConvId && filtered.length){ currentConvId = filtered[0].id; }
+
+  list.onclick = async (e)=>{
+    const row = e.target.closest(".conv-item");
+    if(!row) return;
+    const cid = row.getAttribute("data-cid");
+    const btn = e.target.closest("button[data-action]");
+
+    if(btn){
+      const action = btn.getAttribute("data-action");
+      if(action==="rename"){
+        const current = (conversations.find(x=>x.id===cid)?.title) || "Nouveau chat";
+        const nv = prompt("Nouveau titre", current);
+        if(nv && nv.trim()){
+          try{
+            await renameConversation(cid, nv.trim());
+            await listConversations(cid);
+            toast("Titre mis à jour ✅");
+          }catch(err){
+            toast("Échec renommage: "+(err.message||"error"), false);
+          }
+        }
+        return;
+      }
+      if(action==="delete"){
+        if(confirm("Supprimer cette conversation ?")){
+          try{
+            await deleteConversation(cid);
+            conversations = conversations.filter(x=>x.id!==cid);
+            if(currentConvId===cid){ currentConvId=null; $("#main").innerHTML=""; }
+            await listConversations();
+            toast("Conversation supprimée ✅");
+          }catch(err){
+            toast("Échec suppression: "+(err.message||"error"), false);
+          }
+        }
+        return;
+      }
+    }
+
+    try{
+      currentConvId = cid;
+      $$(".conv-item").forEach(n=>n.classList.remove("active"));
+      const sel = `[data-cid="${cssSel(cid)}"]`;
+      document.querySelector(sel)?.classList.add("active");
+      await fetchMessages(cid);
+    }catch(err){
+      toast("Impossible d'ouvrir la conversation: "+(err.message||"error"), false);
+    }
+  };
+}
+
+function renderMessages(id, scroll=false){
+  const main=$("#main");
+  const msgs = messagesByConv[id] || [];
+  main.innerHTML = msgs.map(m=>{
+    const me = m.role==="user";
+    const src = (m.sources && m.sources.length) ? `
+      <details class="sources"><summary>Sources</summary>
+        <div class="src-list">
+          ${(m.sources||[]).map(s=>`• ${escapeHtml(s.title||"")} ${("score" in s && s.score!==undefined)?`(score ${s.score})`:``} ${("chunk" in s && s.chunk!==undefined)?`#${s.chunk}`:``}`).join("<br/>")}
+        </div>
+      </details>` : "";
+    return `
+      <div class="msg ${me?"me":""}">
+        <div class="avatar" style="${me?"background:linear-gradient(180deg,rgba(34,197,94,.35),transparent),var(--card)":"background:linear-gradient(180deg,rgba(59,130,246,.35),transparent),var(--card)"}">${me?"U":"A"}</div>
+        <div style="flex:1">
+          <div class="label">${me?"Vous":"Assistant"}</div>
+          <div class="bubble">${linkify(escapeHtml(m.content||""))}${src}</div>
+        </div>
+      </div>`;
+  }).join("");
+  iconize();
+  if(scroll) main.scrollTop = main.scrollHeight;
+  $("#footInfo").textContent = `Connecté à : ${backend} • ${msgs.length} message${msgs.length>1?"s":""}`;
+}
+function addLocalMessage(id, m){ (messagesByConv[id] ||= []).push(m); }
+
+/* ---------- BINDINGS ---------- */
+$("#btnNewChat").onclick = async()=>{
+  const id = await createConversation("Nouveau chat");
+  await listConversations(id);
+  messagesByConv[id]=[];
+  renderMessages(id,true);
+};
+$("#qSearch").oninput = (e)=>{ searchText = (e.target.value||"").toLowerCase(); renderConversations(currentConvId); };
+$("#btnSend").onclick = async()=>{ const q=$("#prompt").value.trim(); if(!q) return; $("#prompt").value=""; await sendMessage(q); };
+$("#prompt").addEventListener("keydown", (e)=>{ if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); $("#btnSend").click(); }});
+$("#pdfInput").addEventListener("change", async (e)=>{
+  const files = e.target.files;
+  await uploadSelected(files);
+  e.target.value = "";
+});
+
+/* ---------- INIT ---------- */
+(async function init(){
+  iconize();
+  if(!token){ location.href="login.html"; return; }
+  try{ const r=await fetch(backend+"/health"); setApiStatus(r.ok); }catch{ setApiStatus(false); }
+  await listConversations();
+  if(currentConvId){
+    const first = document.querySelector(`[data-cid="${cssSel(currentConvId)}"]`);
+    first?.classList.add("active");
+    await fetchMessages(currentConvId);
+  }
+})();
+</script>
+</body>
+</html>
