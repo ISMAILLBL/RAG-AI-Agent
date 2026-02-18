@@ -87,6 +87,7 @@ streamlit run app.py
 
 ## 👨‍💻 Author
 
-Ismail Boulaich
+Ismail Boulaich 
 
 Academic internship project
+
